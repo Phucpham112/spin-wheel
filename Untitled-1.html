@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Vòng quay chọn món</title>
+<style>
+  :root{--card:#ffffffcc}
+  body{
+    margin:0;
+    font-family:Inter,Segoe UI,Roboto,Arial;
+    background:linear-gradient(135deg,#f3f7ff,#fff6f6);
+    height:100vh;
+    display:flex;
+    align-items:stretch;
+  }
+  .wrap{
+    width:100%;
+    max-width:1200px;
+    margin:auto;
+    display:flex;
+    gap:18px;
+    padding:18px;
+    box-sizing:border-box;
+  }
+  .left{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:12px;
+  }
+  .wheel-card{
+    width:640px;
+    height:640px;
+    background:var(--card);
+    border-radius:16px;
+    box-shadow:0 10px 30px rgba(0,0,0,.08);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+    overflow:hidden;
+  }
+  canvas#wheelCanvas{
+    width:88%;
+    height:88%;
+    border-radius:50%;
+    box-shadow:inset 0 4px 12px rgba(0,0,0,.06);
+    cursor:pointer;
+  }
+  /* Mũi tên: gần vòng xoay, màu xanh lá, chỉa vào trong */
+  .pointer{
+    position:absolute;
+    right:6%;
+    top:50%;
+    transform:translateY(-50%);
+    width:0;
+    height:0;
+    border-top:18px solid transparent;
+    border-bottom:18px solid transparent;
+    border-right:30px solid #22c55e;
+    filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+    z-index:60;
+  }
+  .centerCircle{
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    width:160px;
+    height:160px;
+    background:#fff;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:700;
+    z-index:70;
+    box-shadow:0 4px 12px rgba(0,0,0,.25);
+    cursor:pointer;
+    overflow:hidden;
+  }
+  .centerCircle.has-image{
+    color:transparent;
+    background-size:cover;
+    background-position:center;
+    background-repeat:no-repeat;
+  }
+
+  /* Confetti */
+  #confettiLayer{
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    overflow:hidden;
+    z-index:80;
+  }
+  .confetti-piece{
+    position:absolute;
+    width:6px;
+    height:12px;
+    border-radius:2px;
+    opacity:0.9;
+    animation:confettiFall linear forwards;
+  }
+  @keyframes confettiFall{
+    0%   {transform:translateY(0) rotate(0deg);}
+    100% {transform:translateY(120vh) rotate(360deg);opacity:0;}
+  }
+
+  .controls{width:360px;flex-shrink:0}
+  .card{
+    background:var(--card);
+    padding:12px;
+    border-radius:12px;
+    box-shadow:0 8px 20px rgba(0,0,0,.06);
+    overflow:auto;
+    max-height:88vh;
+  }
+  .btn{
+    background:#0ea5a4;
+    color:#fff;
+    border:none;
+    padding:8px 12px;
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:700;
+  }
+  .btn.warn{background:#ef4444}
+  textarea{
+    width:100%;
+    height:120px;
+    border-radius:8px;
+    padding:8px;
+    border:1px solid #e5e7eb;
+    resize:vertical;
+  }
+  .opts{
+    margin-top:8px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    max-height:240px;
+    overflow:auto;
+  }
+  .opt-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:8px;
+    border-radius:8px;
+    background:rgba(0,0,0,0.03);
+  }
+  .thumb{
+    width:48px;
+    height:48px;
+    border-radius:6px;
+    background:#f3f3f3;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+  }
+  .thumb img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+  }
+  .muted{opacity:.6}
+  .result{
+    margin-top:12px;
+    padding:10px;
+    border-radius:8px;
+    background:linear-gradient(180deg,#fff,#fafafa);
+    display:flex;
+    gap:10px;
+    align-items:center;
+  }
+  .hidden{display:none}
+  .small{font-size:13px;color:#374151}
+
+  /* popup giữa màn hình (dùng cho kết quả + lịch sử) */
+  #toastArea{
+    position:fixed;
+    inset:0;
+    z-index:200;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    background:rgba(0,0,0,0.35);
+  }
+  #toastArea.active{display:flex}
+  .toast{
+    width:min(460px,90vw);
+    background:#fff;
+    border-radius:10px;
+    box-shadow:0 18px 40px rgba(0,0,0,.35);
+    display:flex;
+    gap:10px;
+    overflow:hidden;
+    align-items:center;
+    padding:12px;
+  }
+  .toast img{width:120px;height:120px;object-fit:cover;border-radius:6px}
+  .toast .txt{flex:1}
+  .toast-title{
+    font-size:14px;
+    font-weight:700;
+    margin-bottom:4px;
+    color:#b91c1c;
+  }
+  .toast-label{
+    font-size:34px;
+    font-weight:500;
+    margin:4px 0;
+  }
+
+  /* lịch sử bên panel phải (vẫn dùng để hiển thị phụ) */
+  #historyList{
+    margin-top:6px;
+    border-top:1px solid #e5e7eb;
+    padding-top:4px;
+  }
+  .history-item{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:4px 0;
+    border-bottom:1px dashed #e5e7eb;
+  }
+  .history-thumb{
+    width:32px;
+    height:32px;
+    border-radius:50%;
+    overflow:hidden;
+    background:#eee;
+    flex-shrink:0;
+  }
+  .history-thumb img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+  }
+
+  @media (max-width:1000px){
+    .wrap{flex-direction:column}
+    .left{order:2}
+    .controls{order:1;width:100%}
+    .wheel-card{width:92vw;height:92vw}
+    canvas#wheelCanvas{width:88%;height:88%}
+    .toast{width:90vw}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="left">
+    <div class="wheel-card">
+      <canvas id="wheelCanvas" width="600" height="600"></canvas>
+      <div id="confettiLayer"></div>
+      <div class="pointer"></div>
+      <div id="centerCircle" class="centerCircle">Bánh Quay</div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button class="btn" id="spinBtn">Spin</button>
+      <button class="btn" id="resetBtn" style="background:#64748b">Reset</button>
+      <button class="btn" id="unhideAllBtn" style="background:#6366f1">Unhide all</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <h3 style="margin:0;">Danh sách lựa chọn</h3>
+        <button id="toggleHistoryBtn" class="btn" style="padding:4px 10px;font-size:12px;">Lịch sử</button>
+      </div>
+      <div class="small muted">Nhập 1 item / 1 dòng, sau đó Add để thêm vào vòng quay.</div>
+
+      <textarea id="bulk" placeholder="Ví dụ: Cơm&#10;bún thái&#10;hủ tiếu"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="importBtn" class="btn">Import</button>
+        <button id="clearBtn" class="btn warn">Clear all</button>
+      </div>
+
+      <div class="opts" id="opts"></div>
+
+      <!-- Form thêm lựa chọn -->
+      <form id="addForm" style="margin-top:8px;display:flex;gap:8px">
+        <input name="label" placeholder="Thêm lựa chọn" style="flex:1;padding:8px;border-radius:8px;border:1px solid #e5e7eb" />
+        <button class="btn" type="submit">Add</button>
+      </form>
+
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <label class="small">Background:</label>
+          <input type="color" id="bgColor" value="#f3f7ff" />
+          <input type="file" id="bgImage" accept="image/*" />
+          <label class="small" style="margin-left:4px">Ảnh giữa vòng quay:</label>
+          <input type="file" id="centerImageInput" accept="image/*" />
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <label class="small">Nhạc nền:</label>
+          <input type="file" id="bgMusicFile" accept="audio/*" />
+          <button class="btn" id="bgMusicToggle" type="button" style="padding:4px 10px;font-size:12px;">Bật nhạc nền</button>
+        </div>
+      </div>
+
+      <div id="resultPanel" class="hidden">
+        <div class="result">
+          <div style="width:90px;height:90px;border-radius:8px;background:#eee;overflow:hidden" id="resThumb"></div>
+          <div>
+            <div id="resLabel" style="font-weight:700"></div>
+            <div class="small">Kết quả</div>
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button id="againBtn" class="btn">Chọn lại</button>
+              <button id="hideWinnerBtn" class="btn warn">Ẩn lựa chọn</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="historyPanel" style="margin-top:12px;display:none;">
+        <h4 style="margin:0 0 4px 0;font-size:15px;">Lịch sử kết quả</h4>
+        <div class="small muted">Kết quả gần nhất ở trên cùng.</div>
+        <div id="historyList"></div>
+      </div>
+
+      <div style="margin-top:12px;font-size:13px;color:#374151">
+        <strong>Ghi chú:</strong>
+        <ul>
+          <li>Ảnh của mỗi lựa chọn (nếu có) sẽ phủ trọn miếng khi quay.</li>
+          <li>Ảnh ở giữa vòng quay là logo cố định, chỉ thay đổi khi bạn chọn lại.</li>
+          <li>Nhạc nền phát liên tục cho toàn trang.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- popup giữa màn hình -->
+<div id="toastArea"></div>
+
+<!-- audio -->
+<audio id="spinSound" src="https://cdn.pixabay.com/audio/2021/08/04/audio_3b4a3e49b3.mp3" preload="auto"></audio>
+<audio id="suspense"  src="https://cdn.pixabay.com/audio/2022/03/15/audio_3f0f4f1ed7.mp3" preload="auto"></audio>
+<audio id="bgMusic" loop></audio>
+
+<script>
+/* ===== MODEL & DOM ===== */
+let options = [];
+const canvas       = document.getElementById('wheelCanvas');
+const ctx          = canvas.getContext('2d');
+const centerCircle = document.getElementById('centerCircle');
+const centerImageInput = document.getElementById('centerImageInput');
+const confettiLayer= document.getElementById('confettiLayer');
+const optsEl       = document.getElementById('opts');
+const bulk         = document.getElementById('bulk');
+const importBtn    = document.getElementById('importBtn');
+const clearBtn     = document.getElementById('clearBtn');
+const addForm      = document.getElementById('addForm');
+const spinBtn      = document.getElementById('spinBtn');
+const resetBtn     = document.getElementById('resetBtn');
+const unhideAllBtn = document.getElementById('unhideAllBtn');
+const bgColor      = document.getElementById('bgColor');
+const bgImage      = document.getElementById('bgImage');
+const spinSound    = document.getElementById('spinSound');
+const suspense     = document.getElementById('suspense');
+const resPanel     = document.getElementById('resultPanel');
+const resLabel     = document.getElementById('resLabel');
+const resThumb     = document.getElementById('resThumb');
+const againBtn     = document.getElementById('againBtn');
+const hideWinnerBtn= document.getElementById('hideWinnerBtn');
+const toastArea    = document.getElementById('toastArea');
+const historyList  = document.getElementById('historyList');
+const historyPanel = document.getElementById('historyPanel');
+const toggleHistoryBtn = document.getElementById('toggleHistoryBtn');
+const bgMusic      = document.getElementById('bgMusic');
+const bgMusicFile  = document.getElementById('bgMusicFile');
+const bgMusicToggle= document.getElementById('bgMusicToggle');
+
+let spinning = false;
+let currentRotation = 0; // radian
+let lastWinnerId = null;
+let currentResultAudio = null;
+let history = [];
+let bgMusicReady = false;
+let bgMusicPlaying = false;
+
+const uid = ()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function visibleOptions(){return options.filter(o=>!o.hidden)}
+function setBackgroundColor(c){document.body.style.background=c}
+function setBackgroundImage(url){
+  document.body.style.backgroundImage = url?`url(${url})`:'none';
+  document.body.style.backgroundSize='cover';
+}
+
+/* ===== DRAW WHEEL ===== */
+function drawWheel(){
+  const vis = visibleOptions();
+  const n = Math.max(1, vis.length);
+  const slice = 2*Math.PI/n;
+  const w = canvas.width;
+  const h = canvas.height;
+  const cx = w/2, cy = h/2;
+  const r = Math.min(cx,cy)-5;
+
+  ctx.clearRect(0,0,w,h);
+
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(currentRotation);
+
+  for(let i=0;i<n;i++){
+    const opt = vis[i];
+    const start = i*slice;
+    const end   = start + slice;
+    const mid   = (start+end)/2;
+
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.arc(0,0,r,start,end);
+    ctx.closePath();
+
+    if(opt.img && opt.img.complete){
+      ctx.save();
+      ctx.clip();
+      const img = opt.img;
+      const scale = Math.max((r*2)/img.width,(r*2)/img.height);
+      const dw = img.width*scale;
+      const dh = img.height*scale;
+      ctx.drawImage(img,-dw/2,-dh/2,dw,dh);
+      ctx.restore();
+    }else{
+      const hue = Math.round(i*360/n);
+      ctx.fillStyle = `hsl(${hue} 70% 45%)`;
+      ctx.fill();
+    }
+
+    ctx.strokeStyle="#ffffff";
+    ctx.lineWidth=2;
+    ctx.stroke();
+
+    ctx.save();
+    ctx.rotate(mid);
+    ctx.translate(r*0.7,0);
+    ctx.rotate(Math.PI/2);
+    ctx.textAlign="center";
+    ctx.fillStyle="#ffffff";
+    ctx.font="bold 22px system-ui";
+    ctx.fillText(opt.label,0,0);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+/* ===== SIDEBAR ===== */
+function renderOptionsList(){
+  optsEl.innerHTML='';
+  options.forEach((o,idx)=>{
+    const row=document.createElement('div');
+    row.className='opt-row';
+    row.style.opacity=o.hidden?'0.45':'1';
+
+    const left=document.createElement('div');
+    left.style.display='flex';
+    left.style.gap='10px';
+    left.style.alignItems='center';
+
+    const thumb=document.createElement('div');
+    thumb.className='thumb';
+    if(o.image){
+      const im=document.createElement('img'); im.src=o.image; thumb.appendChild(im);
+    }else thumb.textContent='No';
+
+    left.appendChild(thumb);
+    const txt=document.createElement('div');
+    txt.innerHTML=`<strong>${o.label}</strong><div class="small">#${idx+1}</div>`;
+    left.appendChild(txt);
+
+    const right=document.createElement('div');
+    right.style.display='flex';
+    right.style.gap='6px';
+    right.style.alignItems='center';
+
+    const editBtn=document.createElement('button');
+    editBtn.className='btn';
+    editBtn.textContent='Edit';
+    editBtn.onclick=()=>editOption(o);
+
+    const toggleBtn=document.createElement('button');
+    toggleBtn.className='btn';
+    toggleBtn.textContent=o.hidden?'Unhide':'Hide';
+    toggleBtn.onclick=()=>{o.hidden=!o.hidden;drawWheel();renderOptionsList();};
+
+    const delBtn=document.createElement('button');
+    delBtn.className='btn warn';
+    delBtn.textContent='Del';
+    delBtn.onclick=()=>{if(confirm('Xóa?')){options=options.filter(x=>x.id!==o.id);drawWheel();renderOptionsList();}};
+
+    right.appendChild(editBtn);
+    right.appendChild(toggleBtn);
+    right.appendChild(delBtn);
+
+    row.appendChild(left);
+    row.appendChild(right);
+    optsEl.appendChild(row);
+  });
+}
+
+function editOption(opt){
+  const newLabel=prompt('Chỉnh tên',opt.label);
+  if(newLabel!==null) opt.label=newLabel;
+
+  if(confirm('Đổi ảnh/âm thanh? (OK để chọn)')){
+    const imgIn=document.createElement('input');
+    imgIn.type='file'; imgIn.accept='image/*';
+    imgIn.onchange=()=>{
+      const f=imgIn.files[0];
+      if(f){
+        opt.image=URL.createObjectURL(f);
+        opt.img=new Image();
+        opt.img.src=opt.image;
+        opt.img.onload=()=>{drawWheel();};
+      }
+    };
+    imgIn.click();
+
+    const audIn=document.createElement('input');
+    audIn.type='file'; audIn.accept='audio/*';
+    audIn.onchange=()=>{
+      const f=audIn.files[0];
+      if(f) opt.audio=URL.createObjectURL(f);
+    };
+    audIn.click();
+  }
+  drawWheel();renderOptionsList();
+}
+
+/* ===== HISTORY ===== */
+function addToHistory(item){
+  const entry = {
+    id:item.id,
+    label:item.label,
+    image:item.image || null,
+    time: new Date()
+  };
+  history.unshift(entry);
+  if(history.length>30) history.pop();
+  renderHistory();
+}
+function renderHistory(){
+  historyList.innerHTML='';
+  history.forEach((h,idx)=>{
+    const row=document.createElement('div');
+    row.className='history-item';
+
+    const th=document.createElement('div');
+    th.className='history-thumb';
+    if(h.image){
+      const im=document.createElement('img'); im.src=h.image; th.appendChild(im);
+    }else{
+      th.textContent='#';
+      th.style.display='flex';
+      th.style.alignItems='center';
+      th.style.justifyContent='center';
+      th.style.fontSize='11px';
+    }
+
+    const info=document.createElement('div');
+    info.innerHTML=`<div><strong>${h.label}</strong></div>
+                    <div class="small muted">#${idx+1} – ${h.time.toLocaleTimeString('vi-VN')}</div>`;
+
+    row.appendChild(th);
+    row.appendChild(info);
+    historyList.appendChild(row);
+  });
+}
+
+/* ===== RANDOM / AUDIO ===== */
+function secureRandomInt(maxExclusive){
+  if(maxExclusive<=0) return 0;
+  const u32=new Uint32Array(1);
+  const max=0xFFFFFFFF;
+  const limit=Math.floor((max+1)/maxExclusive)*maxExclusive;
+  while(true){
+    crypto.getRandomValues(u32);
+    const r=u32[0];
+    if(r<limit) return r%maxExclusive;
+  }
+}
+function stopCurrentResultAudio(){
+  if(currentResultAudio){
+    try{currentResultAudio.pause();currentResultAudio.currentTime=0;}catch(e){}
+    currentResultAudio=null;
+  }
+  if('speechSynthesis' in window){
+    try{window.speechSynthesis.cancel();}catch(e){}
+  }
+}
+
+/* ===== CONFETTI ===== */
+function fireConfetti(){
+  confettiLayer.innerHTML='';
+  const colors=['#ff5252','#ffeb3b','#69f0ae','#40c4ff','#b388ff'];
+  const pieces=120;
+  for(let i=0;i<pieces;i++){
+    const s=document.createElement('div');
+    s.className='confetti-piece';
+    s.style.background=colors[Math.floor(Math.random()*colors.length)];
+    s.style.left=Math.random()*100+'%';
+    s.style.top=(-10-Math.random()*40)+'px';
+    const duration=1.8+Math.random()*1.4;
+    s.style.animationDuration=duration+'s';
+    s.style.animationDelay=(Math.random()*0.3)+'s';
+    confettiLayer.appendChild(s);
+  }
+  setTimeout(()=>{confettiLayer.innerHTML='';},3200);
+}
+
+/* ===== SPIN – bản tăng tốc, quay nhiều vòng hơn ===== */
+function spin(){
+  const vis = visibleOptions();
+  const n = vis.length;
+  if (spinning || n === 0) return;
+  spinning = true;
+
+  stopCurrentResultAudio();
+  resPanel.classList.add('hidden');
+  toastArea.classList.remove('active');
+
+  try { spinSound.currentTime = 0; spinSound.play().catch(() => {}); } catch (e) {}
+  try { suspense.currentTime = 0; suspense.play().catch(() => {}); } catch (e) {}
+
+  const chosenIndex = secureRandomInt(n);
+  const slice       = 2 * Math.PI / n;
+  const mid         = chosenIndex * slice + slice / 2;
+
+  // 8–12 vòng
+  const extraTurns  = 10 + secureRandomInt(5);   // 8,9,10,11,12 vòng
+  const offset      = (Math.random() * (slice / 3)) - (slice / 6);
+
+  const targetRotation = - (mid + offset) + extraTurns * 2 * Math.PI;
+
+  // quay nhanh hơn: 2.5–3.5 giây
+  const duration    = 4500 + Math.random() * 1000; // ms
+
+  const startRotation = currentRotation;
+  const delta         = targetRotation - startRotation;
+  let startTime       = null;
+
+  function easeOut(t){ return 1 - Math.pow(1 - t, 3); }
+
+  function animate(ts){
+    if (!startTime) startTime = ts;
+    const elapsed = ts - startTime;
+    let t = elapsed / duration;
+    if (t > 1) t = 1;
+    const e = easeOut(t);
+
+    currentRotation = startRotation + delta * e;
+    drawWheel();
+
+    if (t < 1){
+      requestAnimationFrame(animate);
+    } else {
+      spinning = false;
+      try { spinSound.pause(); spinSound.currentTime = 0; } catch (e) {}
+      try { suspense.pause(); suspense.currentTime = 0; } catch (e) {}
+
+      const winner = vis[chosenIndex];
+      lastWinnerId = winner.id;
+      showResult(winner);
+    }
+  }
+
+  requestAnimationFrame(animate);
+}
+
+/* ===== RESULT ===== */
+function showResult(item){
+  if(!item) return;
+
+  fireConfetti();
+
+  resLabel.textContent=item.label;
+  resThumb.innerHTML='';
+  if(item.image){
+    const im=document.createElement('img');
+    im.src=item.image;
+    im.style.width='100%';
+    im.style.height='100%';
+    im.style.objectFit='cover';
+    resThumb.appendChild(im);
+  }else resThumb.textContent='No image';
+  resPanel.classList.remove('hidden');
+
+  createCenteredToast(item);
+
+  addToHistory(item);
+
+  if('speechSynthesis' in window){
+    const u=new SpeechSynthesisUtterance(item.label);
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+  }
+  if(item.audio){
+    stopCurrentResultAudio();
+    currentResultAudio=new Audio(item.audio);
+    currentResultAudio.play().catch(()=>{currentResultAudio=null;});
+  }
+}
+
+/* popup kết quả */
+function createCenteredToast(item){
+  toastArea.innerHTML='';
+  const t=document.createElement('div');
+  t.className='toast';
+
+  const imWrap=document.createElement('div');
+  if(item.image){
+    const im=document.createElement('img'); im.src=item.image;
+    imWrap.appendChild(im);
+  }else{
+    const p=document.createElement('div');
+    p.style.width='120px';p.style.height='120px';
+    p.style.display='flex';
+    p.style.alignItems='center';p.style.justifyContent='center';
+    p.textContent='No image';
+    imWrap.appendChild(p);
+  }
+
+  const txt=document.createElement('div');
+  txt.className='txt';
+  txt.innerHTML=`<div class="toast-title">We have a winner!</div>
+                 <div class="toast-label">${item.label}</div>
+                 <div class="small">Kết quả</div>`;
+
+  const actions=document.createElement('div');
+  actions.style.display='flex';
+  actions.style.flexDirection='column';
+  actions.style.gap='6px';
+
+  const btnClose=document.createElement('button');
+  btnClose.className='btn';
+  btnClose.textContent='Đóng';
+  btnClose.onclick=()=>{toastArea.classList.remove('active');};
+
+  const btnHide=document.createElement('button');
+  btnHide.className='btn warn';
+  btnHide.textContent='Ẩn lựa chọn';
+  btnHide.onclick=()=>{
+    options=options.map(o=>o.id===item.id?{...o,hidden:true}:o);
+    drawWheel();renderOptionsList();
+    toastArea.classList.remove('active');
+  };
+
+  actions.appendChild(btnClose);
+  actions.appendChild(btnHide);
+
+  t.appendChild(imWrap);
+  t.appendChild(txt);
+  t.appendChild(actions);
+  toastArea.appendChild(t);
+  toastArea.classList.add('active');
+}
+
+/* popup lịch sử giữa màn hình */
+function showHistoryOverlay(){
+  toastArea.innerHTML='';
+  const box=document.createElement('div');
+  box.className='toast';
+  box.style.flexDirection='column';
+  box.style.alignItems='stretch';
+
+  const title=document.createElement('div');
+  title.className='toast-title';
+  title.textContent='Lịch sử kết quả';
+
+  const list=document.createElement('div');
+  list.style.maxHeight='60vh';
+  list.style.overflowY='auto';
+  list.style.margin='8px 0';
+
+  if(history.length===0){
+    const p=document.createElement('div');
+    p.className='small';
+    p.textContent='Chưa có kết quả nào trong lịch sử.';
+    list.appendChild(p);
+  }else{
+    history.forEach((h,idx)=>{
+      const row=document.createElement('div');
+      row.style.display='flex';
+      row.style.alignItems='center';
+      row.style.gap='8px';
+      row.style.padding='4px 0';
+      row.style.borderBottom='1px dashed #e5e7eb';
+
+      const th=document.createElement('div');
+      th.style.width='40px';
+      th.style.height='40px';
+      th.style.borderRadius='50%';
+      th.style.overflow='hidden';
+      th.style.background='#eee';
+      if(h.image){
+        const im=document.createElement('img');
+        im.src=h.image;
+        im.style.width='100%';
+        im.style.height='100%';
+        im.style.objectFit='cover';
+        th.appendChild(im);
+      }else{
+        th.style.display='flex';
+        th.style.alignItems='center';
+        th.style.justifyContent='center';
+        th.textContent='#';
+      }
+
+      const info=document.createElement('div');
+      info.innerHTML=`<div><strong>${h.label}</strong></div>
+                      <div class="small muted">#${idx+1} – ${h.time.toLocaleTimeString('vi-VN')}</div>`;
+
+      row.appendChild(th);
+      row.appendChild(info);
+      list.appendChild(row);
+    });
+  }
+
+  const actions=document.createElement('div');
+  actions.style.display='flex';
+  actions.style.justifyContent='flex-end';
+  actions.style.marginTop='8px';
+  const closeBtn=document.createElement('button');
+  closeBtn.className='btn';
+  closeBtn.textContent='Đóng';
+  closeBtn.onclick=()=>{toastArea.classList.remove('active');};
+
+  actions.appendChild(closeBtn);
+
+  box.appendChild(title);
+  box.appendChild(list);
+  box.appendChild(actions);
+  toastArea.appendChild(box);
+  toastArea.classList.add('active');
+}
+
+/* hide winner từ panel phải */
+hideWinnerBtn.addEventListener('click',()=>{
+  if(!lastWinnerId) return;
+  options=options.map(o=>o.id===lastWinnerId?{...o,hidden:true}:o);
+  lastWinnerId=null;
+  resPanel.classList.add('hidden');
+  drawWheel();renderOptionsList();
+});
+
+/* again */
+againBtn.addEventListener('click',()=>{resPanel.classList.add('hidden');spin();});
+
+/* Reset & unhide */
+resetBtn.addEventListener('click',()=>{
+  spinning=false;
+  currentRotation=0;
+  lastWinnerId=null;
+  resPanel.classList.add('hidden');
+  toastArea.classList.remove('active');
+  confettiLayer.innerHTML='';
+  stopCurrentResultAudio();
+  drawWheel();
+});
+unhideAllBtn.addEventListener('click',()=>{
+  options=options.map(o=>({...o,hidden:false}));
+  drawWheel();renderOptionsList();
+});
+
+/* Import / Add */
+importBtn.addEventListener('click',e=>{
+  e.preventDefault();
+  const lines=bulk.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  lines.forEach(line=>options.push({id:uid(),label:line,image:null,img:null,audio:null,hidden:false}));
+  bulk.value='';
+  drawWheel();renderOptionsList();
+});
+clearBtn.addEventListener('click',e=>{
+  e.preventDefault();
+  if(confirm('Xóa tất cả?')){options=[];drawWheel();renderOptionsList();}
+});
+addForm.addEventListener('submit',e=>{
+  e.preventDefault();
+  const input = addForm.querySelector('input[name="label"]');
+  const label = (input.value || '').trim();
+  if(!label) return;
+  const item={id:uid(),label,image:null,img:null,audio:null,hidden:false};
+  options.push(item);
+  input.value='';
+  drawWheel();renderOptionsList();
+});
+
+/* Background & center image */
+bgColor.addEventListener('input',()=>setBackgroundColor(bgColor.value));
+bgImage.addEventListener('change',()=>{
+  const f=bgImage.files[0];
+  if(f) setBackgroundImage(URL.createObjectURL(f));
+});
+centerImageInput.addEventListener('change',()=>{
+  const f=centerImageInput.files[0];
+  if(!f) return;
+  const url=URL.createObjectURL(f);
+  centerCircle.classList.add('has-image');
+  centerCircle.style.backgroundImage=`url(${url})`;
+  centerCircle.textContent='';
+});
+
+/* Nhạc nền */
+bgMusicFile.addEventListener('change',()=>{
+  const f=bgMusicFile.files[0];
+  if(!f) return;
+  const url=URL.createObjectURL(f);
+  bgMusic.src=url;
+  bgMusicReady=true;
+  bgMusicPlaying=false;
+  bgMusicToggle.textContent='Bật nhạc nền';
+});
+bgMusicToggle.addEventListener('click',()=>{
+  if(!bgMusicReady){
+    alert('Vui lòng chọn file nhạc nền trước.');
+    return;
+  }
+  if(!bgMusicPlaying){
+    bgMusic.play().then(()=>{
+      bgMusicPlaying=true;
+      bgMusicToggle.textContent='Tắt nhạc nền';
+    }).catch(()=>{});
+  }else{
+    bgMusic.pause();
+    bgMusic.currentTime=0;
+    bgMusicPlaying=false;
+    bgMusicToggle.textContent='Bật nhạc nền';
+  }
+});
+
+/* Nút Lịch sử: hiện popup giữa màn hình */
+toggleHistoryBtn.addEventListener('click',()=>{
+  historyPanel.style.display='none';
+  showHistoryOverlay();
+});
+
+/* Spin bằng nút, canvas, và vòng tròn giữa */
+spinBtn.addEventListener('click',spin);
+canvas.addEventListener('click',spin);
+centerCircle.addEventListener('click',spin);
+
+/* Init sample */
+function initSample(){
+  options=[
+    {id:uid(),label:'Cơm',     image:null,img:null,audio:null,hidden:false},
+    {id:uid(),label:'Bún thái',image:null,img:null,audio:null,hidden:false},
+    {id:uid(),label:'Hủ tiếu', image:null,img:null,audio:null,hidden:false}
+  ];
+  drawWheel();renderOptionsList();
+}
+initSample();
+</script>
+</body>
+</html>
